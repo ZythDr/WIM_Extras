@@ -46,6 +46,7 @@ local Orig = {}
 -- Forward declarations for functions referenced before definition
 local RemoveTab
 local UpdateTabLook
+local SaveAnchor
 
 -- Helpers
 local function GetFrame(user)
@@ -199,16 +200,6 @@ local function SyncBarScale(bar, frame)
 	end
 end
 
-local function GetWimWindowAlpha()
-	if WIM_Data and type(WIM_Data.windowAlpha) == "number" then
-		return WIM_Data.windowAlpha
-	end
-	if WIM_Data_DEFAULTS and type(WIM_Data_DEFAULTS.windowAlpha) == "number" then
-		return WIM_Data_DEFAULTS.windowAlpha
-	end
-	return 1
-end
-
 -- Helper: Fully enable a WIM frame and its interactive elements
 local function EnableFrame(frame)
 	if not frame then return end
@@ -216,13 +207,21 @@ local function EnableFrame(frame)
 		frame:SetAlpha(frame._wimExtrasAlpha)
 		frame._wimExtrasAlpha = nil
 	end
+	-- WIM expects these child widgets to stay fully opaque even when the window
+	-- background is translucent (it does this in WIM_SetWindowProps).
+	local frameName = frame:GetName()
+	local scroll = frameName and getglobal(frameName .. "ScrollingMessageFrame")
+	if scroll and scroll.SetAlpha then scroll:SetAlpha(1) end
+	local msgBox = frameName and getglobal(frameName .. "MsgBox")
+	if msgBox and msgBox.SetAlpha then msgBox:SetAlpha(1) end
+	local shortcut = frameName and getglobal(frameName .. "ShortcutFrame")
+	if shortcut and shortcut.SetAlpha then shortcut:SetAlpha(1) end
 	frame:EnableMouse(true)
 	local children = { frame:GetChildren() }
 	for _, child in ipairs(children) do
 		if child.EnableMouse then child:EnableMouse(true) end
 	end
 	-- Enable shortcut buttons
-	local frameName = frame:GetName()
 	for i = 1, 5 do
 		local btn = getglobal(frameName .. "ShortcutFrameButton" .. i)
 		if btn then btn:EnableMouse(true) end
@@ -241,13 +240,21 @@ local function DisableFrame(frame)
 		end
 	end
 	frame:SetAlpha(0)
+	-- When we hide windows via alpha, also hide the main child widgets so
+	-- text/buttons don't remain visible if the client doesn't inherit alpha.
+	local frameName = frame:GetName()
+	local scroll = frameName and getglobal(frameName .. "ScrollingMessageFrame")
+	if scroll and scroll.SetAlpha then scroll:SetAlpha(0) end
+	local msgBox = frameName and getglobal(frameName .. "MsgBox")
+	if msgBox and msgBox.SetAlpha then msgBox:SetAlpha(0) end
+	local shortcut = frameName and getglobal(frameName .. "ShortcutFrame")
+	if shortcut and shortcut.SetAlpha then shortcut:SetAlpha(0) end
 	frame:EnableMouse(false)
 	local children = { frame:GetChildren() }
 	for _, child in ipairs(children) do
 		if child.EnableMouse then child:EnableMouse(false) end
 	end
 	-- Disable shortcut buttons
-	local frameName = frame:GetName()
 	for i = 1, 5 do
 		local btn = getglobal(frameName .. "ShortcutFrameButton" .. i)
 		if btn then btn:EnableMouse(false) end
@@ -682,9 +689,8 @@ local function LayoutTabs()
 					btn:SetWidth(displayWidth)
 					btn:ClearAllPoints()
 					btn:SetPoint("LEFT", bar, "LEFT", displayLeft, 0)
-					btn:SetFrameStrata("TOOLTIP")
-					btn:SetFrameLevel(501)
 					btn:Show()
+					UpdateTabLook(btn)
 				else
 					btn:Hide()
 					-- Track as off-screen for flash purposes
@@ -697,7 +703,6 @@ local function LayoutTabs()
 					end
 				end
 			end
-			UpdateTabLook(btn)
 		end
 	end
 	
@@ -732,8 +737,6 @@ local function LayoutTabs()
 		bar:SetWidth(barWidth)
 		bar:ClearAllPoints()
 		bar:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", barXOffset, 4)
-		bar:SetFrameStrata("TOOLTIP")
-		bar:SetFrameLevel(500)
 		bar:Show()
 	else
 		bar:Hide()
@@ -744,7 +747,7 @@ end
 Tabs.layout = LayoutTabs
 
 -- Save window position from active frame
-local function SaveAnchor()
+SaveAnchor = function()
 	if not Tabs.active then return end
 	local f = GetFrame(Tabs.active)
 	if f then
@@ -917,9 +920,6 @@ local function CreateTab(user)
 	-- Make tabs draggable - drags the WIM frame (bar follows via anchor)
 	btn:RegisterForDrag("LeftButton")
 	btn:SetScript("OnDragStart", function()
-		-- Track start pos to differentiate drag vs click (especially when minimized)
-		this.dragStartX, this.dragStartY = GetCursorPosition()
-		
 		if Tabs.active then
 			local f = GetFrame(Tabs.active)
 			if f then f:StartMoving(); Tabs.barDragging = true end
@@ -931,33 +931,7 @@ local function CreateTab(user)
 			if f then f:StopMovingOrSizing() end
 			Tabs.barDragging = false
 			SaveAnchor()
-			
-			-- If minimized and movement was tiny, treat as a click (restore)
-			-- This fixes the issue where dragging intercepts the click
-			if Tabs.minimized and this.dragStartX then
-				local x, y = GetCursorPosition()
-				local dist = math.sqrt((x - this.dragStartX)^2 + (y - this.dragStartY)^2)
-				
-				if dist < 5 then
-					-- Treat as Left Click
-					local wasActive = (Tabs.active == this.user)
-					
-					-- If switching tabs, explicitly move the new tab to current position
-					-- This prevents snapping to the new tab's old position
-					if not wasActive then
-						local fNew = GetFrame(this.user)
-						if fNew then ApplyAnchor(fNew) end
-					end
-					
-					Tabs.active = this.user
-					ToggleMinimize()
-					
-					local btn = Tabs.buttons[this.user]
-					if btn then SetTabUnread(btn, false) end
-				end
-			end
 		end
-		this.dragStartX = nil
 	end)
 	
 	btn:SetScript("OnClick", function()
@@ -1063,13 +1037,8 @@ end
 local function UpdateFlash()
 	if not Tabs.unreadCount or Tabs.unreadCount <= 0 then return end
 	Tabs.flashOn = not Tabs.flashOn
-	-- Layout handles tab + scroll button flash updates when visible
 	if Tabs.bar and Tabs.bar:IsVisible() then
 		LayoutTabs()
-	else
-		for _, btn in pairs(Tabs.buttons) do
-			UpdateTabLook(btn)
-		end
 	end
 end
 
