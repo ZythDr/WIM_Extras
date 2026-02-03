@@ -74,15 +74,30 @@ local function InitPfUITabColorEvents()
 	end
 end
 
-local function ApplyWIMFontSize(frame)
-	if not frame or not frame.GetName then return end
-	if not (WIM_Data and WIM_Data.fontSize) then return end
+local function ApplyWIMFontToMsgFrame(msgframe)
+	if not msgframe or not msgframe.SetFont then return end
 	if not pfUI or not pfUI.font_default then return end
+	local _, currentSize, flags = msgframe:GetFont()
+	local size = (WIM_Data and WIM_Data.fontSize) or currentSize
+	msgframe:SetFont(pfUI.font_default, size, flags)
+end
+
+local function HookMsgFrameFont(frame)
+	if not frame or not frame.GetName then return end
 	local msgframe = _G[frame:GetName() .. "ScrollingMessageFrame"]
-	if msgframe and msgframe.SetFont then
-		local _, _, flags = msgframe:GetFont()
-		msgframe:SetFont(pfUI.font_default, WIM_Data.fontSize, flags)
+	if not msgframe then return end
+	if msgframe._wimPfuiFontHooked then
+		ApplyWIMFontToMsgFrame(msgframe)
+		return
 	end
+	msgframe._wimPfuiFontHooked = true
+	local origSetFont = msgframe.SetFont
+	msgframe.SetFont = function(self, font, size, flags)
+		local useFont = (pfUI and pfUI.font_default) or font
+		local useSize = (WIM_Data and WIM_Data.fontSize) or size
+		return origSetFont(self, useFont, useSize, flags)
+	end
+	ApplyWIMFontToMsgFrame(msgframe)
 end
 
 local function ApplyWIMFontSizeToExisting()
@@ -90,7 +105,7 @@ local function ApplyWIMFontSizeToExisting()
 	for _, info in pairs(WIM_Windows) do
 		if info and info.frame then
 			local frame = _G[info.frame]
-			if frame then ApplyWIMFontSize(frame) end
+			if frame then HookMsgFrameFont(frame) end
 		end
 	end
 end
@@ -100,10 +115,10 @@ local function HookWIMWindowFontSize()
 	if type(hooksecurefunc) ~= "function" then return end
 	if type(WIM_WindowOnShow) ~= "function" or type(WIM_SetWindowProps) ~= "function" then return end
 	hooksecurefunc("WIM_WindowOnShow", function()
-		if this then ApplyWIMFontSize(this) end
+		if this then HookMsgFrameFont(this) end
 	end)
 	hooksecurefunc("WIM_SetWindowProps", function(theWin)
-		if theWin then ApplyWIMFontSize(theWin) end
+		if theWin then HookMsgFrameFont(theWin) end
 	end)
 	pfuiFontHooked = true
 end
