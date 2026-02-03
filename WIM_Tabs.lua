@@ -198,14 +198,23 @@ local function SyncBarScale(bar, frame)
 	end
 end
 
+local function GetWimWindowAlpha()
+	if WIM_Data and type(WIM_Data.windowAlpha) == "number" then
+		return WIM_Data.windowAlpha
+	end
+	if WIM_Data_DEFAULTS and type(WIM_Data_DEFAULTS.windowAlpha) == "number" then
+		return WIM_Data_DEFAULTS.windowAlpha
+	end
+	return 1
+end
+
 -- Helper: Fully enable a WIM frame and its interactive elements
 local function EnableFrame(frame)
 	if not frame then return end
-	local alpha = 1
-	if WIM_Data and WIM_Data.windowAlpha then
-		alpha = WIM_Data.windowAlpha
+	if frame._wimExtrasAlpha ~= nil then
+		frame:SetAlpha(frame._wimExtrasAlpha)
+		frame._wimExtrasAlpha = nil
 	end
-	frame:SetAlpha(alpha)
 	frame:EnableMouse(true)
 	local children = { frame:GetChildren() }
 	for _, child in ipairs(children) do
@@ -222,6 +231,14 @@ end
 -- Helper: Fully disable a WIM frame (for minimize/hidden state)
 local function DisableFrame(frame)
 	if not frame then return end
+	if frame._wimExtrasAlpha == nil then
+		local current = frame:GetAlpha()
+		if current and current > 0 then
+			frame._wimExtrasAlpha = current
+		else
+			frame._wimExtrasAlpha = GetWimWindowAlpha()
+		end
+	end
 	frame:SetAlpha(0)
 	frame:EnableMouse(false)
 	local children = { frame:GetChildren() }
@@ -233,6 +250,27 @@ local function DisableFrame(frame)
 	for i = 1, 5 do
 		local btn = getglobal(frameName .. "ShortcutFrameButton" .. i)
 		if btn then btn:EnableMouse(false) end
+	end
+end
+
+local function EnforceTabVisibility()
+	if Tabs.minimized then
+		for user in pairs(Tabs.buttons) do
+			local f = GetFrame(user)
+			if f then DisableFrame(f) end
+		end
+		return
+	end
+	if not Tabs.active then return end
+	for user in pairs(Tabs.buttons) do
+		local f = GetFrame(user)
+		if f then
+			if user == Tabs.active then
+				EnableFrame(f)
+			else
+				DisableFrame(f)
+			end
+		end
 	end
 end
 
@@ -1268,6 +1306,17 @@ local function HookSetWindowProps()
 	end
 end
 
+local function HookSetAllWindowProps()
+	if Orig.SetAllWindowProps then return end
+	if type(WIM_SetAllWindowProps) ~= "function" then return end
+
+	Orig.SetAllWindowProps = WIM_SetAllWindowProps
+	WIM_SetAllWindowProps = function()
+		Orig.SetAllWindowProps()
+		EnforceTabVisibility()
+	end
+end
+
 -- Hook WIM_SetWhoInfo to update tab name colors when class data arrives
 local function HookSetWhoInfo()
 	if Orig.SetWhoInfo then return end
@@ -1301,6 +1350,7 @@ local function Init()
 	HookPost()
 	HookHideAll()
 	HookSetWindowProps()
+	HookSetAllWindowProps()
 	HookSetWhoInfo()
 	InitClassColorEvents()
 	UpdateUnitClassCache()
