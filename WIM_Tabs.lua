@@ -38,6 +38,7 @@ WIM_Tabs_OnSkinTab = nil
 WIM_Tabs_OnSkinBar = nil
 WIM_Tabs_OnUpdateTabLook = nil  -- Called when tab appearance updates (active/inactive/flash)
 WIM_Tabs_OnUpdateScrollFlash = nil  -- Called when scroll button flash state changes
+WIM_Tabs_OnEnsureFont = nil  -- Called when a WIM frame should re-apply font settings
 
 -- Original functions we hook
 local Orig = {}
@@ -1106,6 +1107,9 @@ local function HookFrame(frame)
 				ApplyAnchor(self)
 			end
 			origShow(self)
+			if WIM_Tabs_OnEnsureFont then
+				WIM_Tabs_OnEnsureFont(self)
+			end
 			-- But make it invisible and click-through
 			DisableFrame(self)
 			LayoutTabs()
@@ -1122,6 +1126,9 @@ local function HookFrame(frame)
 			origShow(self)
 			-- Ensure visible and interactive
 			EnableFrame(self)
+			if WIM_Tabs_OnEnsureFont then
+				WIM_Tabs_OnEnsureFont(self)
+			end
 		else
 			-- New message for non-active user: create tab and mark unread
 			if frameUser then
@@ -1297,6 +1304,9 @@ local function HookSetWindowProps()
 	Orig.SetWindowProps = WIM_SetWindowProps
 	WIM_SetWindowProps = function(theWin)
 		Orig.SetWindowProps(theWin)
+		if theWin and WIM_Tabs_OnEnsureFont then
+			WIM_Tabs_OnEnsureFont(theWin)
+		end
 		if Tabs.active and Tabs.layout then
 			local activeFrame = GetFrame(Tabs.active)
 			if activeFrame == theWin then
@@ -1314,6 +1324,14 @@ local function HookSetAllWindowProps()
 	WIM_SetAllWindowProps = function()
 		Orig.SetAllWindowProps()
 		EnforceTabVisibility()
+		if WIM_Tabs_OnEnsureFont then
+			for user in pairs(Tabs.buttons) do
+				local frame = GetFrame(user)
+				if frame then
+					WIM_Tabs_OnEnsureFont(frame)
+				end
+			end
+		end
 	end
 end
 
