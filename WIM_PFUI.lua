@@ -17,7 +17,6 @@ local pfColors = {
 }
 
 local pfuiFontHooked = false
-local pfuiPostFontHooked = false
 
 local function HexToRGB(hex)
 	if not hex or hex == "" then return nil end
@@ -81,80 +80,16 @@ local function GetWIMFontSize()
 	return nil
 end
 
-local function ApplyWIMFontToMsgFrame(msgframe)
-	if not msgframe or not msgframe.SetFont then return end
+local function EnsureWIMFont(frame)
+	if not frame or not frame.GetName then return end
 	if not pfUI or not pfUI.font_default then return end
+	local msgframe = _G[frame:GetName() .. "ScrollingMessageFrame"]
+	if not msgframe or not msgframe.SetFont then return end
 	local _, currentSize, flags = msgframe:GetFont()
 	local size = GetWIMFontSize() or currentSize
-	msgframe:SetFont(pfUI.font_default, size, flags)
-end
-
-local function HookMsgFrameFont(frame)
-	if not frame or not frame.GetName then return end
-	local msgframe = _G[frame:GetName() .. "ScrollingMessageFrame"]
-	if not msgframe then return end
-	if msgframe._wimPfuiFontHooked then
-		ApplyWIMFontToMsgFrame(msgframe)
-		return
+	if size then
+		msgframe:SetFont(pfUI.font_default, size, flags)
 	end
-	msgframe._wimPfuiFontHooked = true
-	local origSetFont = msgframe.SetFont
-	msgframe.SetFont = function(self, font, size, flags)
-		local useFont = (pfUI and pfUI.font_default) or font
-		local useSize = GetWIMFontSize() or size
-		return origSetFont(self, useFont, useSize, flags)
-	end
-	if msgframe.SetFontObject then
-		local origSetFontObject = msgframe.SetFontObject
-		msgframe.SetFontObject = function(self, fontObj)
-			if fontObj and fontObj.GetFont then
-				local font, size, flags = fontObj:GetFont()
-				return self:SetFont(font, size, flags)
-			end
-			return origSetFontObject(self, fontObj)
-		end
-	end
-	ApplyWIMFontToMsgFrame(msgframe)
-end
-
-local function ApplyWIMFontSizeToExisting()
-	if not WIM_Windows then return end
-	for _, info in pairs(WIM_Windows) do
-		if info and info.frame then
-			local frame = _G[info.frame]
-			if frame then HookMsgFrameFont(frame) end
-		end
-	end
-end
-
-local function HookWIMWindowFontSize()
-	if pfuiFontHooked then return end
-	if type(hooksecurefunc) ~= "function" then return end
-	if type(WIM_WindowOnShow) ~= "function" or type(WIM_SetWindowProps) ~= "function" then return end
-	hooksecurefunc("WIM_WindowOnShow", function()
-		if this then HookMsgFrameFont(this) end
-	end)
-	hooksecurefunc("WIM_SetWindowProps", function(theWin)
-		if theWin then HookMsgFrameFont(theWin) end
-	end)
-	if type(WIM_SetAllWindowProps) == "function" then
-		hooksecurefunc("WIM_SetAllWindowProps", function()
-			ApplyWIMFontSizeToExisting()
-		end)
-	end
-	pfuiFontHooked = true
-end
-
-local function HookWIMPostMessageFont()
-	if pfuiPostFontHooked then return end
-	if type(hooksecurefunc) ~= "function" then return end
-	if type(WIM_PostMessage) ~= "function" then return end
-	hooksecurefunc("WIM_PostMessage", function(user)
-		if not user then return end
-		local frame = _G["WIM_msgFrame" .. user]
-		if frame then HookMsgFrameFont(frame) end
-	end)
-	pfuiPostFontHooked = true
 end
 
 -- Load colors from pfUI config
@@ -335,9 +270,18 @@ local function SetupHooks()
 	-- Provide pfUI class cache for tab name colors
 	WIM_Tabs_GetExternalClassColor = GetPfUIClassColor
 	InitPfUITabColorEvents()
-	HookWIMWindowFontSize()
-	HookWIMPostMessageFont()
-	ApplyWIMFontSizeToExisting()
+	WIM_Tabs_OnEnsureFont = EnsureWIMFont
+	if not pfuiFontHooked then
+		pfuiFontHooked = true
+		if WIM_Windows then
+			for _, info in pairs(WIM_Windows) do
+				if info and info.frame then
+					local frame = _G[info.frame]
+					if frame then EnsureWIMFont(frame) end
+				end
+			end
+		end
+	end
 	-- Skin any existing bar and tabs
 	if WIM_TabsState then
 		if WIM_TabsState.bar then
