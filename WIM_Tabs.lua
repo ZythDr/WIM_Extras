@@ -201,7 +201,11 @@ end
 -- Helper: Fully enable a WIM frame and its interactive elements
 local function EnableFrame(frame)
 	if not frame then return end
-	frame:SetAlpha(1)
+	local alpha = 1
+	if WIM_Data and WIM_Data.windowAlpha then
+		alpha = WIM_Data.windowAlpha
+	end
+	frame:SetAlpha(alpha)
 	frame:EnableMouse(true)
 	local children = { frame:GetChildren() }
 	for _, child in ipairs(children) do
