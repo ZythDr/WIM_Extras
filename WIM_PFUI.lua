@@ -16,6 +16,8 @@ local pfColors = {
 	flashBorderR = 1, flashBorderG = 0.8, flashBorderB = 0.2, flashBorderA = 1
 }
 
+local pfuiFontHooked = false
+
 local function HexToRGB(hex)
 	if not hex or hex == "" then return nil end
 	if string.len(hex) > 6 and string.sub(hex, 1, 2) == "ff" then
@@ -72,6 +74,40 @@ local function InitPfUITabColorEvents()
 	end
 end
 
+local function ApplyWIMFontSize(frame)
+	if not frame or not frame.GetName then return end
+	if not (WIM_Data and WIM_Data.fontSize) then return end
+	if not pfUI or not pfUI.font_default then return end
+	local msgframe = _G[frame:GetName() .. "ScrollingMessageFrame"]
+	if msgframe and msgframe.SetFont then
+		local _, _, flags = msgframe:GetFont()
+		msgframe:SetFont(pfUI.font_default, WIM_Data.fontSize, flags)
+	end
+end
+
+local function ApplyWIMFontSizeToExisting()
+	if not WIM_Windows then return end
+	for _, info in pairs(WIM_Windows) do
+		if info and info.frame then
+			local frame = _G[info.frame]
+			if frame then ApplyWIMFontSize(frame) end
+		end
+	end
+end
+
+local function HookWIMWindowFontSize()
+	if pfuiFontHooked then return end
+	if type(hooksecurefunc) ~= "function" then return end
+	if type(WIM_WindowOnShow) ~= "function" or type(WIM_SetWindowProps) ~= "function" then return end
+	hooksecurefunc("WIM_WindowOnShow", function()
+		if this then ApplyWIMFontSize(this) end
+	end)
+	hooksecurefunc("WIM_SetWindowProps", function(theWin)
+		if theWin then ApplyWIMFontSize(theWin) end
+	end)
+	pfuiFontHooked = true
+end
+
 -- Load colors from pfUI config
 local function LoadPfUIColors()
 	if pfUI_config and pfUI_config.appearance and pfUI_config.appearance.border then
@@ -104,7 +140,11 @@ end
 
 -- Update tab border colors based on state
 local function UpdateTabLook(btn, isActive, isUnread, flashOn)
-	if not btn or not btn._pfuiSkinned then return end
+	if not btn then return end
+	if not btn._pfuiSkinned then
+		SkinTab(btn)
+	end
+	if not btn._pfuiSkinned then return end
 	if not btn.SetBackdropBorderColor then return end
 	
 	if isActive then
@@ -246,7 +286,8 @@ local function SetupHooks()
 	-- Provide pfUI class cache for tab name colors
 	WIM_Tabs_GetExternalClassColor = GetPfUIClassColor
 	InitPfUITabColorEvents()
-	
+	HookWIMWindowFontSize()
+	ApplyWIMFontSizeToExisting()
 	-- Skin any existing bar and tabs
 	if WIM_TabsState then
 		if WIM_TabsState.bar then
