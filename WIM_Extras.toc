@@ -1,12 +1,17 @@
 ## Interface: 11200
 ## Title: WIM_Extras
-## Author: ZythDr
+## Author: Custom Fixes
 ## Version: 1.0.0
 ## Notes: Extra fixes for WIM on Turtle WoW.
 ## Dependencies: WIM
 ## OptionalDeps: pfUI
+## SavedVariables: WIM_ExtrasDB
 ## DefaultState: Enabled
 
-WIM_Tabs.lua
-WIM_PFUI.lua
-WIM_Extras.lua
+Core.lua
+Utils.lua
+Resize.lua
+Tabs.lua
+PfUI.lua
+Focus.lua
+Options.lua
