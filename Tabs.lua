@@ -24,10 +24,12 @@ local Tabs = {
 	flashEnabled = (WIM_Extras and WIM_Extras.db and WIM_Extras.db.tabFlashEnabled) ~= false,
 	flashColor = (WIM_Extras and WIM_Extras.db and WIM_Extras.db.tabFlashColor) or { r = 1, g = 0.8, b = 0.2, a = 0.7 },
 	flashUseClassColor = (WIM_Extras and WIM_Extras.db and WIM_Extras.db.tabFlashUseClassColor) == true,
+	flashLabelEnabled = (WIM_Extras and WIM_Extras.db and WIM_Extras.db.tabFlashLabelEnabled) == true,
 	flashInterval = (WIM_Extras and WIM_Extras.db and WIM_Extras.db.tabFlashInterval) or 0.8,
 	barHeight = (WIM_Extras and WIM_Extras.db and WIM_Extras.db.tabBarHeight) or 20,
 	barPosition = (WIM_Extras and WIM_Extras.db and WIM_Extras.db.tabBarPosition) or "TOP",
 	sortMode = (WIM_Extras and WIM_Extras.db and WIM_Extras.db.tabSortMode) or "none",
+	fontSize = (WIM_Extras and WIM_Extras.db and WIM_Extras.db.tabFontSize) or nil,
 }
 
 -- Expose for external skinning (e.g., pfUI integration)
@@ -43,9 +45,32 @@ local MAX_TAB_WIDTH = 400
 local SCROLL_BTN_WIDTH = 16
 local MAX_TABS_BEFORE_SCROLL = 4  -- Dynamic sizing up to this many tabs
 local TAB_CLASS_DIM = 0.75
+local TAB_FLASH_LABEL_DIM = 0.4
 
 local function GetTabHeight()
 	return (Tabs.barHeight and Tabs.barHeight > 0) and Tabs.barHeight or 20
+end
+
+local function ApplyFontSizeToButton(btn)
+	if not btn or not btn.label or not btn.label.SetFont then return end
+	local font, size, flags
+	if btn._wimExtrasFont then
+		font = btn._wimExtrasFont
+		size = btn._wimExtrasFontSize
+		flags = btn._wimExtrasFontFlags
+	else
+		font, size, flags = btn.label:GetFont()
+		if (not font or not size) and GameFontNormalSmall and GameFontNormalSmall.GetFont then
+			font, size, flags = GameFontNormalSmall:GetFont()
+		end
+		btn._wimExtrasFont = font
+		btn._wimExtrasFontSize = size
+		btn._wimExtrasFontFlags = flags
+	end
+	local targetSize = Tabs.fontSize or size
+	if font and targetSize then
+		btn.label:SetFont(font, targetSize, flags)
+	end
 end
 
 local function GetMaxScrollOffset(tabCount)
@@ -331,6 +356,14 @@ function WIM_Tabs_SetFlashUseClassColor(enabled)
 	UpdateTabVisuals()
 end
 
+function WIM_Tabs_SetFlashLabelEnabled(enabled)
+	Tabs.flashLabelEnabled = enabled and true or false
+	if WIM_Extras and WIM_Extras.db then
+		WIM_Extras.db.tabFlashLabelEnabled = Tabs.flashLabelEnabled
+	end
+	UpdateTabVisuals()
+end
+
 function WIM_Tabs_SetFlashInterval(seconds)
 	if type(seconds) ~= "number" then return end
 	if seconds < 0.1 then seconds = 0.1 end
@@ -364,6 +397,20 @@ function WIM_Tabs_SetBarPosition(pos)
 		WIM_Extras.db.tabBarPosition = pos
 	end
 	if Tabs.layout then Tabs.layout() end
+end
+
+function WIM_Tabs_SetFontSize(size)
+	if type(size) ~= "number" then return end
+	if size < 8 then size = 8 end
+	if size > 24 then size = 24 end
+	size = math.floor(size + 0.5)
+	Tabs.fontSize = size
+	if WIM_Extras and WIM_Extras.db then
+		WIM_Extras.db.tabFontSize = size
+	end
+	for _, btn in pairs(Tabs.buttons) do
+		ApplyFontSizeToButton(btn)
+	end
 end
 
 function WIM_Tabs_SetSortMode(mode)
@@ -441,6 +488,26 @@ local function GetCachedChildren(frame)
 end
 
 -- Helper: Fully enable a WIM frame and its interactive elements
+local function RestoreChildMouse(child)
+	if not child or not child.EnableMouse then return end
+	if child._wimExtrasMouse ~= nil then
+		child:EnableMouse(child._wimExtrasMouse)
+		child._wimExtrasMouse = nil
+	end
+end
+
+local function CacheAndDisableChildMouse(child)
+	if not child or not child.EnableMouse then return end
+	if child._wimExtrasMouse == nil then
+		if child.IsMouseEnabled then
+			child._wimExtrasMouse = child:IsMouseEnabled() and true or false
+		else
+			child._wimExtrasMouse = true
+		end
+	end
+	child:EnableMouse(false)
+end
+
 local function EnableFrame(frame)
 	if not frame then return end
 	frame:SetAlpha(GetWimWindowAlpha())
@@ -457,7 +524,7 @@ local function EnableFrame(frame)
 	frame:EnableMouse(true)
 	local children = GetCachedChildren(frame)
 	for _, child in ipairs(children or {}) do
-		if child.EnableMouse then child:EnableMouse(true) end
+		RestoreChildMouse(child)
 	end
 	-- Enable shortcut buttons
 	for i = 1, 5 do
@@ -483,7 +550,7 @@ local function DisableFrame(frame)
 	frame:EnableMouse(false)
 	local children = GetCachedChildren(frame)
 	for _, child in ipairs(children or {}) do
-		if child.EnableMouse then child:EnableMouse(false) end
+		CacheAndDisableChildMouse(child)
 	end
 	-- Disable shortcut buttons
 	for i = 1, 5 do
@@ -736,19 +803,38 @@ UpdateTabLook = function(btn)
 		btn.bg:SetTexture(0.15, 0.15, 0.15, 1)
 	end
 	
-	local r, g, b = GetClassColor(btn.user)
-	if r and g and b then
+	local classR, classG, classB = GetClassColor(btn.user)
+	local labelR, labelG, labelB
+	if classR and classG and classB then
 		if not isActive then
-			r, g, b = r * TAB_CLASS_DIM, g * TAB_CLASS_DIM, b * TAB_CLASS_DIM
+			labelR, labelG, labelB = classR * TAB_CLASS_DIM, classG * TAB_CLASS_DIM, classB * TAB_CLASS_DIM
+		else
+			labelR, labelG, labelB = classR, classG, classB
 		end
-		btn.label:SetTextColor(r, g, b)
 	else
 		if isActive then
-			btn.label:SetTextColor(1, 1, 1)
+			labelR, labelG, labelB = 1, 1, 1
 		else
-			btn.label:SetTextColor(0.7, 0.7, 0.7)
+			labelR, labelG, labelB = 0.7, 0.7, 0.7
 		end
 	end
+
+	-- Optional label flashing for unread tabs (class color <-> dark gray)
+	if Tabs.flashLabelEnabled and btn.unread and not isActive then
+		if Tabs.flashOn then
+			if classR and classG and classB then
+				labelR, labelG, labelB = classR, classG, classB
+			end
+		else
+			if classR and classG and classB then
+				labelR, labelG, labelB = classR * TAB_FLASH_LABEL_DIM, classG * TAB_FLASH_LABEL_DIM, classB * TAB_FLASH_LABEL_DIM
+			else
+				labelR, labelG, labelB = TAB_FLASH_LABEL_DIM, TAB_FLASH_LABEL_DIM, TAB_FLASH_LABEL_DIM
+			end
+		end
+	end
+
+	btn.label:SetTextColor(labelR, labelG, labelB)
 	
 	-- Flash overlay for unread
 	local flashAlpha = (Tabs.flashColor and Tabs.flashColor.a) or 0.5
@@ -759,8 +845,8 @@ UpdateTabLook = function(btn)
 	
 	if btn.flash then
 		local fr, fg, fb
-		if Tabs.flashUseClassColor and r and g and b then
-			fr, fg, fb = r, g, b
+		if Tabs.flashUseClassColor and classR and classG and classB then
+			fr, fg, fb = classR, classG, classB
 		else
 			local c = Tabs.flashColor or { r = 1, g = 0.8, b = 0.2, a = 0.7 }
 			fr, fg, fb = c.r, c.g, c.b
@@ -1272,6 +1358,7 @@ local function CreateTab(user)
 	btn.label = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 	btn.label:SetPoint("CENTER", btn, "CENTER", 0, 0)
 	btn.label:SetText(displayName)
+	ApplyFontSizeToButton(btn)
 	
 	btn.user = user
 	btn.unread = false
