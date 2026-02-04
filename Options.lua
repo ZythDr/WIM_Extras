@@ -142,6 +142,14 @@ local function RefreshControls()
 			WIM_ExtrasOptionPfUIFocusUseClass:Enable()
 		end
 	end
+	if WIM_ExtrasOptionPfUIFocusOpaque then
+		WIM_ExtrasOptionPfUIFocusOpaque:SetChecked(db.pfuiFocusBorderOpaque == true)
+		if not pfUI then
+			WIM_ExtrasOptionPfUIFocusOpaque:Disable()
+		else
+			WIM_ExtrasOptionPfUIFocusOpaque:Enable()
+		end
+	end
 	if WIM_ExtrasOptionPfUIFocusBorderColor and WIM_ExtrasOptionPfUIFocusBorderColor.tex then
 		local c = db.pfuiFocusBorderColor or { r = 0.75, g = 0.75, b = 0.75, a = 1 }
 		WIM_ExtrasOptionPfUIFocusBorderColor.tex:SetVertexColor(c.r, c.g, c.b)
@@ -515,8 +523,17 @@ local function CreateOptionsUI()
 		RefreshControls()
 	end)
 
+	local focusOpaqueCb = CreateCheckBox("WIM_ExtrasOptionPfUIFocusOpaque", content, "Opaque focus border",
+		"Keep the focus border fully opaque (ignore WIM transparency).")
+	focusOpaqueCb:SetPoint("TOPLEFT", content, "TOPLEFT", 14, -540)
+	focusOpaqueCb:SetScript("OnClick", function()
+		if WIM_PFUI_SetFocusBorderOpaque then
+			WIM_PFUI_SetFocusBorderOpaque(this:GetChecked() and true or false)
+		end
+	end)
+
 	local focusBorder = CreateColorSwatch("WIM_ExtrasOptionPfUIFocusBorderColor", content, "Focus border color")
-	focusBorder:SetPoint("TOPLEFT", content, "TOPLEFT", 18, -540)
+	focusBorder:SetPoint("TOPLEFT", content, "TOPLEFT", 18, -565)
 	focusBorder:SetScript("OnClick", function()
 		local db = GetDB()
 		if pfUI and db.pfuiFocusUseClassColor ~= true then
