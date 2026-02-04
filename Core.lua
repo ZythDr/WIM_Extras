@@ -9,9 +9,11 @@ WIM_Extras.defaults = {
 	tabFlashEnabled = true,
 	tabFlashColor = { r = 1, g = 0.8, b = 0.2, a = 0.7 },
 	tabFlashUseClassColor = true,
+	tabFlashLabelEnabled = false,
 	tabFlashInterval = 0.8,
 	tabBarHeight = 20,
 	tabBarPosition = "TOP", -- "TOP" or "BOTTOM"
+	tabFontSize = nil,
 	pfuiFocusBorderColor = { r = 0.75, g = 0.75, b = 0.75, a = 1 },
 	pfuiFocusUseClassColor = true,
 	pfuiFocusBorderOpaque = false,
@@ -33,6 +35,18 @@ local function ApplyDefaults(db, defaults)
 	end
 end
 
+local function MigrateLegacy(db)
+	if not db then return end
+	if db.tabFontSize == nil and db.tabFontScale then
+		local size = 12
+		if GameFontNormalSmall and GameFontNormalSmall.GetFont then
+			local _, s = GameFontNormalSmall:GetFont()
+			if s then size = s end
+		end
+		db.tabFontSize = math.floor(size * db.tabFontScale + 0.5)
+	end
+end
+
 local function NewRuntimeDB()
 	local db = {}
 	ApplyDefaults(db, WIM_Extras.defaults)
@@ -45,6 +59,7 @@ local function BindSavedDB()
 	-- Use the saved table if present; otherwise fall back to runtime defaults.
 	if WIM_ExtrasDB then
 		ApplyDefaults(WIM_ExtrasDB, WIM_Extras.defaults)
+		MigrateLegacy(WIM_ExtrasDB)
 		WIM_Extras.db = WIM_ExtrasDB
 		dbBound = true
 		return
@@ -77,11 +92,17 @@ local function ApplySettings()
 	if WIM_Tabs_SetFlashUseClassColor then
 		WIM_Tabs_SetFlashUseClassColor(db.tabFlashUseClassColor == true)
 	end
+	if WIM_Tabs_SetFlashLabelEnabled then
+		WIM_Tabs_SetFlashLabelEnabled(db.tabFlashLabelEnabled == true)
+	end
 	if WIM_Tabs_SetFlashInterval and db.tabFlashInterval then
 		WIM_Tabs_SetFlashInterval(db.tabFlashInterval)
 	end
 	if WIM_Tabs_SetBarPosition and db.tabBarPosition then
 		WIM_Tabs_SetBarPosition(db.tabBarPosition)
+	end
+	if WIM_Tabs_SetFontSize and db.tabFontSize then
+		WIM_Tabs_SetFontSize(db.tabFontSize)
 	end
 	if WIM_Tabs_SetSortMode and db.tabSortMode then
 		WIM_Tabs_SetSortMode(db.tabSortMode)
