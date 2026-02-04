@@ -8,12 +8,13 @@ WIM_Extras.defaults = {
 	tabGrowDirection = "LEFT", -- "LEFT" or "RIGHT"
 	tabFlashEnabled = true,
 	tabFlashColor = { r = 1, g = 0.8, b = 0.2, a = 0.7 },
-	tabFlashUseClassColor = false,
+	tabFlashUseClassColor = true,
 	tabFlashInterval = 0.8,
 	tabBarHeight = 20,
 	tabBarPosition = "TOP", -- "TOP" or "BOTTOM"
 	pfuiFocusBorderColor = { r = 0.75, g = 0.75, b = 0.75, a = 1 },
-	pfuiFocusUseClassColor = false,
+	pfuiFocusUseClassColor = true,
+	pfuiFocusBorderOpaque = false,
 	tabSortMode = "none", -- "none", "incoming_outgoing", "outgoing"
 }
 
@@ -93,6 +94,9 @@ local function ApplySettings()
 	end
 	if WIM_PFUI_SetFocusUseClassColor then
 		WIM_PFUI_SetFocusUseClassColor(db.pfuiFocusUseClassColor == true)
+	end
+	if WIM_PFUI_SetFocusBorderOpaque then
+		WIM_PFUI_SetFocusBorderOpaque(db.pfuiFocusBorderOpaque == true)
 	end
 end
 
