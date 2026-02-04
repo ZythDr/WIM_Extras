@@ -31,6 +31,7 @@ local RefreshTabColors
 -- Easy to tweak: values are 0..1
 local focusBorder = { r = 0.75, g = 0.75, b = 0.75, a = 1 }
 local focusUseClassColor = false
+local focusBorderOpaque = false
 
 local function ApplyFlashColorFromConfig()
 	if WIM_Extras and WIM_Extras.db and WIM_Extras.db.tabFlashColor then
@@ -145,6 +146,23 @@ function WIM_PFUI_SetFocusUseClassColor(enabled)
 	end
 	if RefreshTabColors then
 		RefreshTabColors()
+	end
+end
+
+function WIM_PFUI_SetFocusBorderOpaque(enabled)
+	focusBorderOpaque = enabled and true or false
+	if WIM_Extras and WIM_Extras.db then
+		WIM_Extras.db.pfuiFocusBorderOpaque = focusBorderOpaque
+	end
+	if WIM_Windows then
+		for _, info in pairs(WIM_Windows) do
+			if info and info.frame then
+				local frame = _G[info.frame]
+				if frame and frame._wimExtrasFocusBorder then
+					ApplyFocusBorder(frame, frame == (WIM_EditBoxInFocus and WIM_EditBoxInFocus:GetParent()))
+				end
+			end
+		end
 	end
 end
 
@@ -370,6 +388,25 @@ local function EnsureWIMFont(frame)
 	end
 end
 
+local function RaiseEditBox(frame)
+	if not frame or not frame.GetName then return end
+	local msgBox = _G[frame:GetName() .. "MsgBox"]
+	if not msgBox or not msgBox.SetFrameLevel then return end
+	local base = (frame.GetFrameLevel and frame:GetFrameLevel()) or 0
+	if msgBox:GetFrameLevel() < base + 5 then
+		msgBox:SetFrameLevel(base + 5)
+	end
+	if msgBox.SetFrameStrata and frame.GetFrameStrata then
+		msgBox:SetFrameStrata(frame:GetFrameStrata() or "DIALOG")
+	end
+	if msgBox.backdrop and msgBox.backdrop.SetFrameLevel then
+		msgBox.backdrop:SetFrameLevel(msgBox:GetFrameLevel() - 1)
+	end
+	if msgBox.backdrop_border and msgBox.backdrop_border.SetFrameLevel then
+		msgBox.backdrop_border:SetFrameLevel(msgBox:GetFrameLevel() + 1)
+	end
+end
+
 local function EnsureFocusBorder(frame)
 	if not frame then return nil end
 	if frame._wimExtrasFocusBorder then return frame._wimExtrasFocusBorder end
@@ -393,9 +430,31 @@ local function EnsureFocusBorder(frame)
 	return border
 end
 
+local function ConfigureFocusBorderParent(border, frame)
+	if not border or not frame then return end
+	local opaque = focusBorderOpaque
+	if WIM_Extras and WIM_Extras.db and WIM_Extras.db.pfuiFocusBorderOpaque ~= nil then
+		opaque = WIM_Extras.db.pfuiFocusBorderOpaque == true
+	end
+	local parent = opaque and UIParent or frame
+	if border:GetParent() ~= parent then
+		border:SetParent(parent)
+	end
+	border:ClearAllPoints()
+	border:SetAllPoints(frame)
+	if frame.GetFrameStrata then
+		border:SetFrameStrata(frame:GetFrameStrata() or "DIALOG")
+	end
+	if frame.GetFrameLevel then
+		border:SetFrameLevel((frame:GetFrameLevel() or 0) + 10)
+	end
+	border:SetAlpha(1)
+end
+
 ApplyFocusBorder = function(frame, focused)
 	local border = EnsureFocusBorder(frame)
 	if not border then return end
+	ConfigureFocusBorderParent(border, frame)
 	if focused then
 		if focusUseClassColor then
 			local r, g, b = GetActiveTabBorderColor()
@@ -421,6 +480,7 @@ local function HookEditBoxFocus(frame)
 	local msgBox = _G[frame:GetName() .. "MsgBox"]
 	if not msgBox or msgBox._wimExtrasFocusHooked or not msgBox.SetScript then return end
 	msgBox._wimExtrasFocusHooked = true
+	RaiseEditBox(frame)
 
 	local function onGain()
 		ApplyFocusBorder(frame, true)
