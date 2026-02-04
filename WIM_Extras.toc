@@ -1,6 +1,6 @@
 ## Interface: 11200
 ## Title: WIM_Extras
-## Author: Custom Fixes
+## Author: ZythDr
 ## Version: 1.0.0
 ## Notes: Extra fixes for WIM on Turtle WoW.
 ## Dependencies: WIM
@@ -9,7 +9,6 @@
 ## DefaultState: Enabled
 
 Core.lua
-Utils.lua
 Resize.lua
 Tabs.lua
 PfUI.lua
