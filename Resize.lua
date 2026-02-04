@@ -11,6 +11,8 @@ local RESIZE_MAX_W = 800
 local RESIZE_MIN_H = 130
 local RESIZE_MAX_H = 600
 local RESIZE_SHORTCUT_MIN_H = 240 -- WIM enforces this when shortcut bar is enabled.
+local HANDLE_SIZE = 18
+local HANDLE_TEX = "Interface\\Cursor\\UI-Cursor-Item"
 
 local State = {
 	temp = nil,        -- { w = number, h = number }
@@ -32,6 +34,13 @@ local function ClampResizeSize(w, h)
 		h = RESIZE_SHORTCUT_MIN_H
 	end
 	return w, h
+end
+
+local function SetCornerAlpha(handle, a)
+	local c = handle._cornerColor or 0.75
+	handle.corner:SetVertexColor(c, c, c, a)
+	handle.lineH:SetVertexColor(c, c, c, a)
+	handle.lineV:SetVertexColor(c, c, c, a)
 end
 
 local function ApplySizeToWindow(frame, w, h)
@@ -87,30 +96,57 @@ function WIM_Extras_Resize_EnsureHandle(frame)
 	if not frame or frame._wimExtrasResizeHandle then return end
 
 	local handle = CreateFrame("Frame", nil, frame)
-	handle:SetWidth(16)
-	handle:SetHeight(16)
+	handle:SetWidth(HANDLE_SIZE)
+	handle:SetHeight(HANDLE_SIZE)
 	handle:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -2, 2)
-	handle:SetFrameLevel((frame.GetFrameLevel and frame:GetFrameLevel() or 0) + 20)
+	handle:SetFrameLevel((frame.GetFrameLevel and frame:GetFrameLevel() or 0) + 200)
 	handle:EnableMouse(true)
 
-	handle.tex = handle:CreateTexture(nil, "OVERLAY")
-	handle.tex:SetAllPoints()
-	handle.tex:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
-	handle:SetAlpha(0.2)
+	handle.corner = handle:CreateTexture(nil, "OVERLAY")
+	handle.corner:SetAllPoints()
+	handle.corner:SetTexture(HANDLE_TEX)
+	handle._cornerColor = 0.75
+	handle.corner:SetVertexColor(handle._cornerColor, handle._cornerColor, handle._cornerColor, 0.5)
+
+	handle.lineH = handle:CreateTexture(nil, "OVERLAY")
+	handle.lineH:SetTexture("Interface\\Buttons\\WHITE8X8")
+	handle.lineH:SetVertexColor(handle._cornerColor, handle._cornerColor, handle._cornerColor, 0.5)
+	handle.lineH:SetPoint("BOTTOMLEFT", handle, "BOTTOMLEFT", 3, 3)
+	handle.lineH:SetPoint("BOTTOMRIGHT", handle, "BOTTOMRIGHT", -3, 3)
+	handle.lineH:SetHeight(1)
+
+	handle.lineV = handle:CreateTexture(nil, "OVERLAY")
+	handle.lineV:SetTexture("Interface\\Buttons\\WHITE8X8")
+	handle.lineV:SetVertexColor(handle._cornerColor, handle._cornerColor, handle._cornerColor, 0.5)
+	handle.lineV:SetPoint("BOTTOMRIGHT", handle, "BOTTOMRIGHT", -3, 3)
+	handle.lineV:SetPoint("TOPRIGHT", handle, "TOPRIGHT", -3, -3)
+	handle.lineV:SetWidth(1)
+
+	local function UpdateHandleVisual()
+		if handle._resizing then
+			SetCornerAlpha(handle, 0.7)
+		elseif handle._hover then
+			SetCornerAlpha(handle, 0.7)
+		else
+			SetCornerAlpha(handle, 0.2)
+		end
+	end
 
 	handle:SetScript("OnEnter", function()
-		handle:SetAlpha(1)
+		handle._hover = true
+		UpdateHandleVisual()
 	end)
 	handle:SetScript("OnLeave", function()
+		handle._hover = false
 		if not handle._resizing then
-			handle:SetAlpha(0.2)
+			UpdateHandleVisual()
 		end
 	end)
 
 	handle:SetScript("OnMouseDown", function()
 		if arg1 ~= "LeftButton" then return end
 		handle._resizing = true
-		handle:SetAlpha(1)
+		UpdateHandleVisual()
 		handle.startX, handle.startY = GetCursorPosition()
 		handle.startW = frame:GetWidth()
 		handle.startH = frame:GetHeight()
@@ -119,7 +155,7 @@ function WIM_Extras_Resize_EnsureHandle(frame)
 			if IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then
 				handle._resizing = false
 				handle:SetScript("OnUpdate", nil)
-				handle:SetAlpha(0)
+				UpdateHandleVisual()
 				if State.temp then
 					ApplySizeToAll(State.temp.w, State.temp.h)
 				end
@@ -143,11 +179,12 @@ function WIM_Extras_Resize_EnsureHandle(frame)
 		if arg1 ~= "LeftButton" then return end
 		handle._resizing = false
 		handle:SetScript("OnUpdate", nil)
-		handle:SetAlpha(0.2)
+		UpdateHandleVisual()
 		if State.temp then
 			ApplySizeToAll(State.temp.w, State.temp.h)
 		end
 	end)
 
 	frame._wimExtrasResizeHandle = handle
+	UpdateHandleVisual()
 end
