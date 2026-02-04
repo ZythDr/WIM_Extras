@@ -55,6 +55,15 @@ local function CreateSectionTitle(parent, text, anchor, x, y)
 	return title
 end
 
+local function GetDefaultTabFontSize()
+	local size = 12
+	if GameFontNormalSmall and GameFontNormalSmall.GetFont then
+		local _, s = GameFontNormalSmall:GetFont()
+		if s then size = s end
+	end
+	return size
+end
+
 local function CreateColorSwatch(name, parent, label)
 	local btn = CreateFrame("Button", name, parent)
 	btn:SetWidth(16)
@@ -99,6 +108,9 @@ local function RefreshControls()
 	if WIM_ExtrasOptionFlashUseClass then
 		WIM_ExtrasOptionFlashUseClass:SetChecked(db.tabFlashUseClassColor == true)
 	end
+	if WIM_ExtrasOptionFlashLabel then
+		WIM_ExtrasOptionFlashLabel:SetChecked(db.tabFlashLabelEnabled == true)
+	end
 	if WIM_ExtrasOptionTabBarTop then
 		WIM_ExtrasOptionTabBarTop:SetChecked(db.tabBarPosition ~= "BOTTOM")
 	end
@@ -121,6 +133,17 @@ local function RefreshControls()
 		local edit = getglobal("WIM_ExtrasOptionTabHeightEditBox")
 		if edit then edit:SetText(h) end
 		WIM_ExtrasOptionTabHeight._wimExtrasIgnore = false
+	end
+	if WIM_ExtrasOptionTabFontSize then
+		local v = db.tabFontSize or GetDefaultTabFontSize()
+		WIM_ExtrasOptionTabFontSize._wimExtrasIgnore = true
+		WIM_ExtrasOptionTabFontSize:SetValue(v)
+		local sliderMin, sliderMax = WIM_ExtrasOptionTabFontSize:GetMinMaxValues()
+		getglobal("WIM_ExtrasOptionTabFontSizeLow"):SetText(string.format("%.0f", sliderMin))
+		getglobal("WIM_ExtrasOptionTabFontSizeHigh"):SetText(string.format("%.0f", sliderMax))
+		local edit = getglobal("WIM_ExtrasOptionTabFontSizeEditBox")
+		if edit then edit:SetText(string.format("%.0f", v)) end
+		WIM_ExtrasOptionTabFontSize._wimExtrasIgnore = false
 	end
 	if WIM_ExtrasOptionFlashInterval then
 		local v = db.tabFlashInterval or 0.8
@@ -455,11 +478,33 @@ local function CreateOptionsUI()
 		ApplyTabHeight(v)
 	end)
 
+	local fontSize = CreateFrame("Slider", "WIM_ExtrasOptionTabFontSize", content, "WIM_Options_SliderTemplate")
+	fontSize:SetWidth(140)
+	fontSize:SetHeight(17)
+	fontSize:SetPoint("TOPLEFT", content, "TOPLEFT", 14, -336)
+	fontSize:SetMinMaxValues(8, 24)
+	fontSize:SetValueStep(1)
+	getglobal("WIM_ExtrasOptionTabFontSizeTitle"):SetText("Tab font size")
+	fontSize:SetScript("OnShow", function()
+		local sliderMin, sliderMax = this:GetMinMaxValues()
+		getglobal(this:GetName() .. "Low"):SetText(string.format("%.0f", sliderMin))
+		getglobal(this:GetName() .. "High"):SetText(string.format("%.0f", sliderMax))
+	end)
+	fontSize:SetScript("OnValueChanged", function()
+		if this._wimExtrasIgnore then return end
+		local v = math.floor(this:GetValue() + 0.5)
+		local edit = getglobal("WIM_ExtrasOptionTabFontSizeEditBox")
+		if edit then edit:SetText(string.format("%.0f", v)) end
+		if WIM_Tabs_SetFontSize then
+			WIM_Tabs_SetFontSize(v)
+		end
+	end)
+
 	-- Tab flashing
-	CreateSectionTitle(content, "Tab Flashing", "TOPLEFT", 10, -340)
+	CreateSectionTitle(content, "Tab Flashing", "TOPLEFT", 10, -380)
 	local flashCb = CreateCheckBox("WIM_ExtrasOptionTabFlash", content, "Enable unread tab flashing",
 		"Toggles flashing on unread tabs.")
-	flashCb:SetPoint("TOPLEFT", content, "TOPLEFT", 14, -365)
+	flashCb:SetPoint("TOPLEFT", content, "TOPLEFT", 14, -405)
 	flashCb:SetScript("OnClick", function()
 		if WIM_Tabs_SetFlashEnabled then
 			WIM_Tabs_SetFlashEnabled(this:GetChecked() and true or false)
@@ -468,7 +513,7 @@ local function CreateOptionsUI()
 
 	local flashClassCb = CreateCheckBox("WIM_ExtrasOptionFlashUseClass", content, "Use class color for flash",
 		"Use the tab's class color for unread flash.")
-	flashClassCb:SetPoint("TOPLEFT", content, "TOPLEFT", 14, -390)
+	flashClassCb:SetPoint("TOPLEFT", content, "TOPLEFT", 14, -430)
 	flashClassCb:SetScript("OnClick", function()
 		if WIM_Tabs_SetFlashUseClassColor then
 			WIM_Tabs_SetFlashUseClassColor(this:GetChecked() and true or false)
@@ -476,8 +521,17 @@ local function CreateOptionsUI()
 		RefreshControls()
 	end)
 
+	local flashLabelCb = CreateCheckBox("WIM_ExtrasOptionFlashLabel", content, "Flash tab name text",
+		"Flash the tab name between class color and dark gray for unread tabs.")
+	flashLabelCb:SetPoint("TOPLEFT", content, "TOPLEFT", 14, -450)
+	flashLabelCb:SetScript("OnClick", function()
+		if WIM_Tabs_SetFlashLabelEnabled then
+			WIM_Tabs_SetFlashLabelEnabled(this:GetChecked() and true or false)
+		end
+	end)
+
 	local flashColor = CreateColorSwatch("WIM_ExtrasOptionFlashColor", content, "Flash color")
-	flashColor:SetPoint("TOPLEFT", content, "TOPLEFT", 18, -420)
+	flashColor:SetPoint("TOPLEFT", content, "TOPLEFT", 18, -480)
 	flashColor:SetScript("OnClick", function()
 		local db = GetDB()
 		if db.tabFlashUseClassColor ~= true then
@@ -490,7 +544,7 @@ local function CreateOptionsUI()
 	flashInterval:SetWidth(140)
 	flashInterval:SetHeight(17)
 	-- Leave room for title + keep it from feeling cramped.
-	flashInterval:SetPoint("TOPLEFT", content, "TOPLEFT", 14, -468)
+	flashInterval:SetPoint("TOPLEFT", content, "TOPLEFT", 14, -528)
 	flashInterval:SetMinMaxValues(0.1, 2.0)
 	flashInterval:SetValueStep(0.1)
 	getglobal("WIM_ExtrasOptionFlashIntervalTitle"):SetText("Flash interval (sec)")
@@ -511,11 +565,11 @@ local function CreateOptionsUI()
 	end)
 
 	-- pfUI skin options
-	CreateSectionTitle(content, "pfUI Skin", "TOPLEFT", 10, -490)
+	CreateSectionTitle(content, "pfUI Skin", "TOPLEFT", 10, -550)
 
 	local focusClassCb = CreateCheckBox("WIM_ExtrasOptionPfUIFocusUseClass", content, "Focus border uses class color",
 		"Use the active tab's class color for the focus border.")
-	focusClassCb:SetPoint("TOPLEFT", content, "TOPLEFT", 14, -515)
+	focusClassCb:SetPoint("TOPLEFT", content, "TOPLEFT", 14, -575)
 	focusClassCb:SetScript("OnClick", function()
 		if WIM_PFUI_SetFocusUseClassColor then
 			WIM_PFUI_SetFocusUseClassColor(this:GetChecked() and true or false)
@@ -525,7 +579,7 @@ local function CreateOptionsUI()
 
 	local focusOpaqueCb = CreateCheckBox("WIM_ExtrasOptionPfUIFocusOpaque", content, "Opaque focus border",
 		"Keep the focus border fully opaque (ignore WIM transparency).")
-	focusOpaqueCb:SetPoint("TOPLEFT", content, "TOPLEFT", 14, -540)
+	focusOpaqueCb:SetPoint("TOPLEFT", content, "TOPLEFT", 14, -595)
 	focusOpaqueCb:SetScript("OnClick", function()
 		if WIM_PFUI_SetFocusBorderOpaque then
 			WIM_PFUI_SetFocusBorderOpaque(this:GetChecked() and true or false)
@@ -533,7 +587,7 @@ local function CreateOptionsUI()
 	end)
 
 	local focusBorder = CreateColorSwatch("WIM_ExtrasOptionPfUIFocusBorderColor", content, "Focus border color")
-	focusBorder:SetPoint("TOPLEFT", content, "TOPLEFT", 18, -565)
+	focusBorder:SetPoint("TOPLEFT", content, "TOPLEFT", 18, -625)
 	focusBorder:SetScript("OnClick", function()
 		local db = GetDB()
 		if pfUI and db.pfuiFocusUseClassColor ~= true then
