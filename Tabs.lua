@@ -1254,12 +1254,8 @@ local function CreateTab(user)
 	btn:SetHeight(GetTabHeight())
 	btn:SetWidth(MAX_TAB_WIDTH)  -- Initial width, will be adjusted by LayoutTabs
 	
-	-- Truncate name to 10 chars max for display
 	local name = (WIM_GetAlias and WIM_GetAlias(user)) or user
 	local displayName = name
-	if string.len(displayName) > 10 then
-		displayName = string.sub(displayName, 1, 9) .. ".."
-	end
 	
 	-- Background
 	btn.bg = btn:CreateTexture(nil, "BACKGROUND")
